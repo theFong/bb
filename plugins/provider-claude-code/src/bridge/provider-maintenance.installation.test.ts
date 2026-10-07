@@ -10,7 +10,6 @@ vi.mock("@get-bb/plugin-sdk/provider-bridge", async (importOriginal) => ({
   ...(await importOriginal<
     typeof import("@get-bb/plugin-sdk/provider-bridge")
   >()),
-  experimental_resolveExecutablePath: async () => "/test/claude",
   experimental_probeNpmGlobalPackage: async () => {
     if (state.compatibilityOnly)
       throw new Error("Update discovery ran during compatibility validation");
@@ -26,6 +25,10 @@ vi.mock("@get-bb/plugin-sdk/provider-bridge", async (importOriginal) => ({
     }
     throw new Error(`Unexpected command arguments: ${args.join(" ")}`);
   },
+}));
+
+vi.mock("./claude-executable.js", () => ({
+  findClaudeCodeExecutable: () => "/test/claude",
 }));
 
 import { getClaudeProviderInstallationStatus } from "./provider-maintenance.js";

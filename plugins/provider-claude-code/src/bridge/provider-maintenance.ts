@@ -20,10 +20,10 @@ import {
   experimental_npmGlobalInstallSource as npmGlobalInstallSource,
   experimental_probeNpmGlobalPackage as probeNpmGlobalPackage,
   experimental_readCliVersion as readCliVersion,
-  experimental_resolveExecutablePath as resolveExecutablePath,
   experimental_versionFrom as versionFrom,
 } from "@get-bb/plugin-sdk/provider-bridge";
 import { z } from "zod";
+import { findClaudeCodeExecutable } from "./claude-executable.js";
 
 const execFileAsync = promisify(execFile);
 const USAGE_FETCH_TIMEOUT_MS = 15_000;
@@ -53,37 +53,6 @@ const claudeAccountSchema = z.object({
     })
     .nullish(),
 });
-
-async function claudeExecutable(): Promise<string> {
-  const explicit = process.env.BB_CLAUDE_CODE_EXECUTABLE?.trim();
-  if (explicit) return explicit;
-  if ((await resolveExecutablePath("claude")) !== null) {
-    return "claude";
-  }
-  const nativePath = path.join(
-    os.homedir(),
-    ".local",
-    "bin",
-    process.platform === "win32" ? "claude.exe" : "claude",
-  );
-  const candidates =
-    process.platform === "win32"
-      ? [nativePath]
-      : [
-          ...(process.env.PATH ?? "")
-            .split(path.delimiter)
-            .filter(Boolean)
-            .map((directory) => path.resolve(directory, "claude")),
-          nativePath,
-        ];
-  for (const candidate of candidates) {
-    if ((await resolveExecutablePath(candidate)) === null) continue;
-    try {
-      if ((await fs.stat(candidate)).isFile()) return candidate;
-    } catch {}
-  }
-  return "claude";
-}
 
 function claudeInstallerCommand() {
   return downloadedInstallerCommand(CLAUDE_INSTALL_SCRIPT_URL, {
@@ -159,30 +128,32 @@ function isDefaultNativeClaudePath(executablePath: string | null): boolean {
 export async function getClaudeProviderInstallationStatus(
   checkUpdates = true,
 ): Promise<ProviderInstallationStatus> {
-  const command = await claudeExecutable();
-  const [
-    resolvedExecutable,
-    versionOutput,
-    tagsOutput,
-    npmGlobal,
-    doctorOutput,
-  ] = await Promise.all([
-    resolveExecutablePath(command),
-    commandOutput(command, ["--version"]),
-    checkUpdates
-      ? commandOutput(npmCommand(), [
-          "view",
-          CLAUDE_NPM_PACKAGE,
-          "dist-tags",
-          "--json",
-        ])
-      : null,
-    checkUpdates
-      ? probeNpmGlobalPackage(CLAUDE_NPM_PACKAGE)
-      : { npmBin: null, npmGlobalPackageVersion: null },
-    checkUpdates ? commandOutput(command, ["doctor"]) : null,
-  ]);
-  const installed = resolvedExecutable !== null || versionOutput !== null;
+  const resolvedExecutable = findClaudeCodeExecutable({
+    env: process.env,
+    useWindowsPathExt: true,
+  });
+  const command = resolvedExecutable ?? "claude";
+  const [versionOutput, tagsOutput, npmGlobal, doctorOutput] =
+    await Promise.all([
+      resolvedExecutable === null
+        ? null
+        : commandOutput(command, ["--version"]),
+      checkUpdates
+        ? commandOutput(npmCommand(), [
+            "view",
+            CLAUDE_NPM_PACKAGE,
+            "dist-tags",
+            "--json",
+          ])
+        : null,
+      checkUpdates
+        ? probeNpmGlobalPackage(CLAUDE_NPM_PACKAGE)
+        : { npmBin: null, npmGlobalPackageVersion: null },
+      checkUpdates && resolvedExecutable !== null
+        ? commandOutput(command, ["doctor"])
+        : null,
+    ]);
+  const installed = resolvedExecutable !== null;
   const currentVersion = versionFrom(versionOutput);
   const doctor = claudeDoctor(doctorOutput);
   const tags = claudeDistTags(tagsOutput);
@@ -389,8 +360,11 @@ function healthResult(
 }
 
 export async function getClaudeProviderHealth(): Promise<ProviderHealthResult> {
-  const command = await claudeExecutable();
-  if ((await resolveExecutablePath(command)) === null) {
+  const command = findClaudeCodeExecutable({
+    env: process.env,
+    useWindowsPathExt: true,
+  });
+  if (command === null) {
     return healthResult("not_installed");
   }
   const version = await readCliVersion(command);
@@ -537,8 +511,10 @@ function normalizeUsage(
 }
 
 export async function getClaudeProviderUsage(): Promise<ProviderUsageResult> {
-  const command = await claudeExecutable();
-  if ((await resolveExecutablePath(command)) === null) {
+  if (
+    findClaudeCodeExecutable({ env: process.env, useWindowsPathExt: true }) ===
+    null
+  ) {
     return { supported: true, usage: { status: "not_installed" } };
   }
   const [credentials, account] = await Promise.all([

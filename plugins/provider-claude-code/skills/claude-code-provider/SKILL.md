@@ -30,8 +30,14 @@ with `bb plugin config provider-claude-code set <key> <value>`.
 - bb passes only `BB_CLAUDE_CODE_EXECUTABLE` and `CLAUDE_CODE_OAUTH_TOKEN` to
   the CLI. Mint the token with `claude setup-token` for machines with no
   interactive login.
-- Installation and health checks prefer `BB_CLAUDE_CODE_EXECUTABLE`, then
-  `claude` on `PATH`, then `~/.local/bin/claude` (`claude.exe` on Windows).
+- Sessions, model discovery, and maintenance share executable discovery:
+  `BB_CLAUDE_CODE_EXECUTABLE`, then `PATH`, then known install locations.
+  Unix fallbacks are `~/.local/bin/claude`, `~/.claude/local/claude`,
+  `/opt/homebrew/bin/claude`, and `/usr/local/bin/claude`; Windows uses
+  `%USERPROFILE%/.local/bin/claude.exe`. Root users only use explicit
+  overrides or `PATH`. Invalid overrides never select another installation.
+  Windows maintenance also recognizes npm command shims through `PATHEXT`;
+  SDK sessions automatically select only `claude.exe`.
   A native install does not need to be on `PATH` to be detected. If Claude
   reports that required remote managed settings could not load, run
   `<executablePath> auth login` on the affected machine, using the path from

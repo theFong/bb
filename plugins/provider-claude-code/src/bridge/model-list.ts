@@ -2,7 +2,7 @@ import { type AvailableModel } from "@get-bb/plugin-sdk/provider-bridge";
 import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
 import { buildClaudeCodeModels } from "../model-list.js";
 import { translateMissingClaudeCliCatalogError } from "./missing-cli-error.js";
-import { resolveClaudeCodeExecutable } from "./session-options.js";
+import { resolveClaudeCodeExecutable } from "./claude-executable.js";
 
 function buildModelProbeOptions(env: NodeJS.ProcessEnv): Options {
   const pathToClaudeCodeExecutable = resolveClaudeCodeExecutable({ env });
